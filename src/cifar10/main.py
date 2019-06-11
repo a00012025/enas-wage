@@ -90,6 +90,8 @@ DEFINE_boolean("controller_use_critic", False, "")
 DEFINE_integer("log_every", 50, "How many steps to log")
 DEFINE_integer("eval_every_epochs", 1, "How many epochs to eval")
 
+DEFINE_float("gpu_ratio", 1, "")
+
 def get_ops(images, labels):
   """
   Args:
@@ -239,6 +241,7 @@ def train():
     print("-" * 80)
     print("Starting session")
     config = tf.ConfigProto(allow_soft_placement=True)
+    config.gpu_options.per_process_gpu_memory_fraction = FLAGS.gpu_ratio
     with tf.train.SingularMonitoredSession(
       config=config, hooks=hooks, checkpoint_dir=FLAGS.output_dir) as sess:
         start_time = time.time()
