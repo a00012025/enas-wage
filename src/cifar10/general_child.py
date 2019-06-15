@@ -383,9 +383,11 @@ class GeneralChild(Model):
     if self.whole_channels:
       if self.data_format == "NHWC":
         inp_c = inputs.get_shape()[3].value
+        actual_data_format = "channels_last"
       elif self.data_format == "NCHW":
         inp_c = inputs.get_shape()[1].value
-
+        actual_data_format = "channels_first"
+        
       count = self.sample_arc[start_idx]
       if count in [0, 1, 2, 3]:
         size = [3, 3, 5, 5]
@@ -404,9 +406,13 @@ class GeneralChild(Model):
                              data_format=self.data_format)
           out = batch_norm(out, is_training, data_format=self.data_format)
       elif count == 4:
-        pass
+        with tf.variable_scope("pool"):
+          out = tf.layers.average_pooling2d(
+            inputs, [3, 3], [1, 1], "SAME", data_format=actual_data_format)
       elif count == 5:
-        pass
+        with tf.variable_scope("pool"):
+          out = tf.layers.max_pooling2d(
+            inputs, [3, 3], [1, 1], "SAME", data_format=actual_data_format)
       else:
         raise ValueError("Unknown operation number '{0}'".format(count))
     else:
