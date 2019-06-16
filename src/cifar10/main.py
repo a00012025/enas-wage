@@ -27,7 +27,7 @@ from src.cifar10.micro_controller import MicroController
 from src.cifar10.micro_child import MicroChild
 
 import src.cifar10.modules as qmodules
-import src.cifar10.Options
+import src.cifar10.Option as Option
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
@@ -139,13 +139,13 @@ def get_ops(images, labels):
     lr_min=FLAGS.child_lr_min,
     lr_T_0=FLAGS.child_lr_T_0,
     lr_T_mul=FLAGS.child_lr_T_mul,
-    optim_algo="momentum",
+    optim_algo="sgd",
     sync_replicas=FLAGS.child_sync_replicas,
     num_aggregate=FLAGS.child_num_aggregate,
     num_replicas=FLAGS.child_num_replicas,
-    bitsW=Options.bitsW,
-    bitsG=Options.bitsG,
-    bitsE=Options.bitsE
+    bitsW=Option.bitsW,
+    bitsG=Option.bitsG,
+    bitsE=Option.bitsE
   )
 
   if FLAGS.child_fixed_arc is None:

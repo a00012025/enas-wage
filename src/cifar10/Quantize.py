@@ -54,7 +54,7 @@ def A(x):
     y = Q(x, bitsA)
     return x + tf.stop_gradient(y - x)  # skip derivation of Quantize, but keep Clip
 
-def G(x):
+def G(x, lr=None):
   with tf.name_scope('QG'):
     if bitsG > 15:
       return x
@@ -64,8 +64,9 @@ def G(x):
 
       xmax = tf.reduce_max(tf.abs(x))
       x = x / Shift(xmax)
-
-      norm = Q(LR * x, bitsR)
+      if lr == None:
+        lr = LR
+      norm = Q(lr * x, bitsR)
 
       norm_sign = tf.sign(norm)
       norm_abs = tf.abs(norm)

@@ -1,6 +1,6 @@
-import Quantize
-import myInitializer
-import Option
+import src.cifar10.Quantize as Quantize
+import src.cifar10.myInitializer as myInitializer
+import src.cifar10.Option as Option
 
 import tensorflow as tf
 from tensorflow.contrib.layers import batch_norm
@@ -19,7 +19,6 @@ def arr(stride_or_ksize, data_format='NCHW'):
 
 def get_variable(shape, name):
   with tf.name_scope(name) as scope:
-    # W.append(tf.get_variable(name=name, shape=shape, initializer=initializer))
     w = tf.get_variable(
         name=name, shape=shape,
         initializer=myInitializer.variance_scaling_initializer(
@@ -27,59 +26,48 @@ def get_variable(shape, name):
         )
     )
 
-    # print 'W:', W[-1].device, scope, shape,
     if Quantize.bitsW <= 16:
       # manually clip and quantize W if needed
       W_q_op.append(tf.assign(w, Quantize.Q(w, Quantize.bitsW)))
       W_clip_op.append(tf.assign(w,Quantize.C(w, Quantize.bitsW)))
 
       scale = Option.W_scale[-1]
-      print 'Scale:%d' % scale
       return Quantize.W(w, scale)
       # return W_q[-1]
     else:
       raise NotImplementedError
-    #   a
-    #   print ''
-    #   return W[-1]
 
 def conv(x, ksize, c_out, stride=1, padding='SAME', data_format='NCHW', name='conv'):
-  c_in = x.get_shape().as_list()[1 if data_format=='NCHW' else 3]
+  c_in = x.get_shape()[1 if data_format=='NCHW' else 3]
   W = get_variable([ksize, ksize, c_in, c_out], name)
-  x = tf.nn.conv2d(x, W, arr(stride), padding=padding, data_format=data_format, name=name)
-  # H.append(x)
+  x = tf.nn.conv2d(x, W, arr(stride, data_format), padding=padding, data_format=data_format, name=name)\
   return x
 
 def depth_conv(x, ksize, c_mul, c_out, stride=1, padding='SAME', data_format='NCHW', name='depth_conv'):
-  c_in = x.get_shape().as_list()[1 if data_format=='NCHW' else 3]
+  c_in = x.get_shape()[1 if data_format=='NCHW' else 3]
   W_depth = get_variable([ksize, ksize, c_in, c_mul], name+'-depth')
   W_point = get_variable([1, 1, c_in * c_mul, c_out], name+'-point')
   x = tf.nn.separable_conv2d(x, W_depth, W_point, arr(stride, data_format), padding=padding, data_format=data_format, name=name)
-  # H.append(x)
   return x
 
 def fc(x, c_out, name='fc'):
   c_in = x.get_shape().as_list()[1]
   W = get_variable([c_in, c_out], name)
   x = tf.matmul(x, W)
-  # H.append(x)
   return x
 
 def batch_norm(x, is_training, data_format='NCHW'):
   x = tf.contrib.layers.batch_norm(x, center=True, scale=True, is_training=is_training, decay=0.9, epsilon=1e-5, fused=True, data_format=data_format)
-  # H.append(x)
   return x
 
 def QA(x):
   if Option.bitsA <= 16:
     x = Quantize.A(x)
-    # H.append(x)
   return x
 
 def QE(x):
   if Option.bitsE <= 16:
     x = Quantize.E(x)
-    # H.append(x)
   return x
 
 def activation(x):
@@ -97,7 +85,6 @@ def pool(x, mtype, ksize, stride=1, padding='SAME', data_format='NCHW'):
                        padding=padding, data_format=data_format)
   else:
     assert False, ('Invalid pooling type:' + mtype)
-  # H.append(x)
   return x
 
 if __name__ == '__main__':

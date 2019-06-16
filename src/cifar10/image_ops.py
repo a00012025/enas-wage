@@ -91,6 +91,8 @@ def global_avg_pool(x, data_format="NHWC"):
 
 def batch_norm(x, is_training, name="bn", decay=0.9, epsilon=1e-5,
                data_format="NHWC"):
+  return x
+  """
   if data_format == "NHWC":
     shape = [x.get_shape()[3]]
   elif data_format == "NCHW":
@@ -128,11 +130,10 @@ def batch_norm(x, is_training, name="bn", decay=0.9, epsilon=1e-5,
                                        epsilon=epsilon, data_format=data_format,
                                        is_training=False)
   return x
-
+  """
 
 def batch_norm_with_mask(x, is_training, mask, num_channels, name="bn",
                          decay=0.9, epsilon=1e-3, data_format="NHWC"):
-
   shape = [num_channels]
   indices = tf.where(mask)
   indices = tf.to_int32(indices)
@@ -175,7 +176,6 @@ def batch_norm_with_mask(x, is_training, mask, num_channels, name="bn",
                                        epsilon=epsilon, data_format=data_format,
                                        is_training=False)
   return x
-
 
 def relu(x, leaky=0.0):
   return tf.where(tf.greater(x, 0), x, x * leaky)

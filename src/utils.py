@@ -7,6 +7,8 @@ import numpy as np
 import tensorflow as tf
 
 import src.cifar10.modules as qmodules
+import src.cifar10.Quantize as Quantize
+import Option
 
 user_flags = []
 
@@ -83,12 +85,14 @@ def count_model_params(tf_variables):
     num_vars += np.prod([dim.value for dim in var.get_shape()])
   return num_vars
 
-def quantizeGrads(bitsG, Grads, lr):
-  if bitsG <= 16:
+def quantizeGrads(Grads, lr):
+  if Option.bitsG <= 16:
     grads = []
     for grad in Grads:
-      # TODO: connect Quantize.G
-      grads.append(Quantize.G(grad, lr))
+      if grad is None:
+        grads.append(0.0)
+      else:
+        grads.append(Quantize.G(grad, lr))
     return grads
   return Grads
 
@@ -177,9 +181,11 @@ def get_train_ops(
     learning_rate = tf.cond(tf.less(train_step, lr_warmup_steps),
                             lambda: lr_warmup_val, lambda: learning_rate)
 
-  # TODO
   grads = tf.gradients(loss, tf_variables)
-  grads = quantizeGrads(bitsG, grads, learning_rate)
+  for i in range(len(tf_variables)):
+    if grads[i] == None:
+      print('No Gradient!!', tf_variables[i])
+  grads = quantizeGrads(grads, learning_rate)
   grad_norm = tf.global_norm(grads)
 
   grad_norms = {}

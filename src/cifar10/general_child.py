@@ -17,7 +17,7 @@ from src.utils import get_train_ops
 from src.common_ops import create_weight
 
 import src.cifar10.modules as qmodules
-import src.cifar10.Quantize
+import src.cifar10.Quantize as Quantize
 
 class GeneralChild(Model):
   def __init__(self,
@@ -144,10 +144,10 @@ class GeneralChild(Model):
     stride_spec = self._get_strides(stride)
     # Skip path 1
     # TODO: why avg_pool with kernel 1x1?
-    path1 = qmodules.pool(x, 'AVG', 1, stride, padding='VALID', data_format=self.data_format)
+    path1 = qmodules.pool(x, 'AVG', 2, stride, padding='VALID', data_format=self.data_format)
     with tf.variable_scope("path1_conv"):
       path1 = qmodules.conv(path1, 1, out_filters//2, stride=1, padding='SAME', data_format=self.data_format)
-  
+    
     # Skip path 2
     # First pad with 0"s on the right and bottom, then shift the filter to
     # include those 0"s that were added.
@@ -223,12 +223,10 @@ class GeneralChild(Model):
         print(layers[-1])
 
       x = global_avg_pool(x, data_format=self.data_format)
-      print('x shape: ', x.get_shape())
       # TODO: WAGE training needs Dropout?
       # if is_training:
       #   x = tf.nn.dropout(x, self.keep_prob)
       with tf.variable_scope("fc"):
-        # TODO: check x shape
         x = qmodules.fc(x, 10)
     # for last layer(first layer in backpro) error input quantization
     with tf.variable_scope('lastQE'):
