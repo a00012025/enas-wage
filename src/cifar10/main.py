@@ -26,6 +26,9 @@ from src.cifar10.general_child import GeneralChild
 from src.cifar10.micro_controller import MicroController
 from src.cifar10.micro_child import MicroChild
 
+import src.cifar10.modules as qmodules
+import src.cifar10.Options
+
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 
@@ -140,6 +143,9 @@ def get_ops(images, labels):
     sync_replicas=FLAGS.child_sync_replicas,
     num_aggregate=FLAGS.child_num_aggregate,
     num_replicas=FLAGS.child_num_replicas,
+    bitsW=Options.bitsW,
+    bitsG=Options.bitsG,
+    bitsE=Options.bitsE
   )
 
   if FLAGS.child_fixed_arc is None:
@@ -244,8 +250,8 @@ def train():
     with tf.train.SingularMonitoredSession(
       config=config, hooks=hooks, checkpoint_dir=FLAGS.output_dir) as sess:
         start_time = time.time()
-        # TODO: connect W_q_op
-        sess.run(W_q_op)
+        print('------------- qmodules W_q_op:', qmodules.W_q_op, '---------------')
+        sess.run(qmodules.W_q_op)
         while True:
           run_ops = [
             child_ops["loss"],

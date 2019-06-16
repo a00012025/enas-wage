@@ -9,18 +9,15 @@ import numpy as np
 import tensorflow as tf
 
 from src.cifar10.models import Model
-from src.cifar10.image_ops import conv
-from src.cifar10.image_ops import fully_connected
 from src.cifar10.image_ops import batch_norm
-from src.cifar10.image_ops import batch_norm_with_mask
-from src.cifar10.image_ops import relu
-from src.cifar10.image_ops import max_pool
 from src.cifar10.image_ops import global_avg_pool
 
 from src.utils import count_model_params
 from src.utils import get_train_ops
 from src.common_ops import create_weight
 
+import src.cifar10.modules as qmodules
+import src.cifar10.Quantize
 
 class GeneralChild(Model):
   def __init__(self,
@@ -53,6 +50,9 @@ class GeneralChild(Model):
                num_replicas=None,
                data_format="NHWC",
                name="child",
+               bitsW=2,
+               bitsG=8,
+               bitsE=8,
                *args,
                **kwargs
               ):
@@ -94,6 +94,10 @@ class GeneralChild(Model):
 
     pool_distance = self.num_layers // 3
     self.pool_layers = [pool_distance - 1, 2 * pool_distance - 1]
+    
+    self.bitsW = bitsW
+    self.bitsG = bitsG
+    self.bitsE = bitsE
 
   def _get_C(self, x):
     """
@@ -133,21 +137,16 @@ class GeneralChild(Model):
     if stride == 1:
       with tf.variable_scope("path_conv"):
         inp_c = self._get_C(x)
-        w = create_weight("w", [1, 1, inp_c, out_filters])
-        x = tf.nn.conv2d(x, w, [1, 1, 1, 1], "SAME",
-                         data_format=self.data_format)
+        x = qmodules.conv(x, 1, out_filters, stride=1, data_format=self.data_format)
         x = batch_norm(x, is_training, data_format=self.data_format)
         return x
 
     stride_spec = self._get_strides(stride)
     # Skip path 1
-    path1 = tf.nn.avg_pool(
-        x, [1, 1, 1, 1], stride_spec, "VALID", data_format=self.data_format)
+    # TODO: why avg_pool with kernel 1x1?
+    path1 = qmodules.pool(x, 'AVG', 1, stride, padding='VALID', data_format=self.data_format)
     with tf.variable_scope("path1_conv"):
-      inp_c = self._get_C(path1)
-      w = create_weight("w", [1, 1, inp_c, out_filters // 2])
-      path1 = tf.nn.conv2d(path1, w, [1, 1, 1, 1], "SAME",
-                           data_format=self.data_format)
+      path1 = qmodules.conv(path1, 1, out_filters//2, stride=1, padding='SAME', data_format=self.data_format)
   
     # Skip path 2
     # First pad with 0"s on the right and bottom, then shift the filter to
@@ -160,14 +159,10 @@ class GeneralChild(Model):
       pad_arr = [[0, 0], [0, 0], [0, 1], [0, 1]]
       path2 = tf.pad(x, pad_arr)[:, :, 1:, 1:]
       concat_axis = 1
-  
-    path2 = tf.nn.avg_pool(
-        path2, [1, 1, 1, 1], stride_spec, "VALID", data_format=self.data_format)
+
+    path2 = qmodules.pool(path2, 'AVG', 1, stride, padding='VALID', data_format=self.data_format)
     with tf.variable_scope("path2_conv"):
-      inp_c = self._get_C(path2)
-      w = create_weight("w", [1, 1, inp_c, out_filters // 2])
-      path2 = tf.nn.conv2d(path2, w, [1, 1, 1, 1], "SAME",
-                           data_format=self.data_format)
+      path2 = qmodules.conv(path2, 1, out_filters//2, stride=1, padding='SAME', data_format=self.data_format)
   
     # Concat and apply BN
     final_path = tf.concat(values=[path1, path2], axis=concat_axis)
@@ -195,8 +190,7 @@ class GeneralChild(Model):
 
       out_filters = self.out_filters
       with tf.variable_scope("stem_conv"):
-        w = create_weight("w", [3, 3, 3, out_filters])
-        x = tf.nn.conv2d(images, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
+        x = qmodules.conv(images, 3, out_filters, stride=1, padding='SAME', data_format=self.data_format)
         x = batch_norm(x, is_training, data_format=self.data_format)
         layers.append(x)
 
@@ -229,21 +223,19 @@ class GeneralChild(Model):
         print(layers[-1])
 
       x = global_avg_pool(x, data_format=self.data_format)
-      if is_training:
-        x = tf.nn.dropout(x, self.keep_prob)
+      print('x shape: ', x.get_shape())
+      # TODO: WAGE training needs Dropout?
+      # if is_training:
+      #   x = tf.nn.dropout(x, self.keep_prob)
       with tf.variable_scope("fc"):
-        if self.data_format == "NWHC":
-          inp_c = x.get_shape()[3].value
-        elif self.data_format == "NCHW":
-          inp_c = x.get_shape()[1].value
-        else:
-          raise ValueError("Unknown data_format {0}".format(self.data_format))
-        w = create_weight("w", [inp_c, 10])
-        x = tf.matmul(x, w)
+        # TODO: check x shape
+        x = qmodules.fc(x, 10)
     # for last layer(first layer in backpro) error input quantization
     with tf.variable_scope('lastQE'):
-      # TODO
-      x = _QE(x)
+      if self.bitsE <= 16:
+        x = Quantize.E(x)
+        # TODO: whether needs self.H?
+        # self.H.append(x)
     return x
 
   def _enas_layer(self, layer_id, prev_layers, start_idx, out_filters, is_training):
@@ -303,6 +295,7 @@ class GeneralChild(Model):
       out = tf.case(branches, default=lambda: tf.constant(0, tf.float32, shape=out_shape),
                     exclusive=True)
     else:
+      raise ValueError('Not support whole_channel = False')
       count = self.sample_arc[start_idx:start_idx + 2 * self.num_branches]
       branches = []
       with tf.variable_scope("branch_0"):
@@ -385,41 +378,29 @@ class GeneralChild(Model):
 
     inputs = prev_layers[-1]
     if self.whole_channels:
-      if self.data_format == "NHWC":
-        inp_c = inputs.get_shape()[3].value
-        actual_data_format = "channels_last"
-      elif self.data_format == "NCHW":
-        inp_c = inputs.get_shape()[1].value
-        actual_data_format = "channels_first"
-        
       count = self.sample_arc[start_idx]
       if count in [0, 1, 2, 3]:
         size = [3, 3, 5, 5]
         filter_size = size[count]
         with tf.variable_scope("conv_1x1"):
-          w = create_weight("w", [1, 1, inp_c, out_filters])
-          out = tf.nn.relu(inputs)
-          out = tf.nn.conv2d(out, w, [1, 1, 1, 1], "SAME",
-                             data_format=self.data_format)
+          out = qmodules.activation(inputs)
+          out = qmodules.conv(out, 1, out_filters, stride=1, padding='SAME', data_format=self.data_format)
           out = batch_norm(out, is_training, data_format=self.data_format)
 
         with tf.variable_scope("conv_{0}x{0}".format(filter_size)):
-          w = create_weight("w", [filter_size, filter_size, out_filters, out_filters])
-          out = tf.nn.relu(out)
-          out = tf.nn.conv2d(out, w, [1, 1, 1, 1], "SAME",
-                             data_format=self.data_format)
+          out = qmodules.activation(out)
+          out = qmodules.conv(out, filter_size, out_filters, stride=1, padding='SAME', data_format=self.data_format)
           out = batch_norm(out, is_training, data_format=self.data_format)
       elif count == 4:
         with tf.variable_scope("pool"):
-          out = tf.layers.average_pooling2d(
-            inputs, [3, 3], [1, 1], "SAME", data_format=actual_data_format)
+          out = qmodules.pool(inputs, 'AVG', 3, 1, padding='SAME', data_format=self.data_format)
       elif count == 5:
         with tf.variable_scope("pool"):
-          out = tf.layers.max_pooling2d(
-            inputs, [3, 3], [1, 1], "SAME", data_format=actual_data_format)
+          out = qmodules.pool(inputs, 'MAX', 3, 1, padding='SAME', data_format=self.data_format)
       else:
         raise ValueError("Unknown operation number '{0}'".format(count))
     else:
+      raise ValueError("Only whole_channel is supported")
       count = (self.sample_arc[start_idx:start_idx + 2*self.num_branches] *
                self.out_filters_scale)
       branches = []
@@ -481,11 +462,8 @@ class GeneralChild(Model):
 
       out = prev
       with tf.variable_scope("skip"):
-        w = create_weight(
-          "w", [1, 1, total_skip_channels * out_filters, out_filters])
-        out = tf.nn.relu(out)
-        out = tf.nn.conv2d(
-          out, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
+        out = qmodules.activation(out)
+        out = qmodules.conv(out, 1, out_filters, stride=1, padding='SAME', data_format=self.data_format)
         out = batch_norm(out, is_training, data_format=self.data_format)
 
     return out
@@ -508,49 +486,19 @@ class GeneralChild(Model):
       inp_c = inputs.get_shape()[1].value
 
     with tf.variable_scope("inp_conv_1"):
-      w = create_weight("w", [1, 1, inp_c, out_filters])
-      x = tf.nn.conv2d(inputs, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
+      x = qmodules.conv(inputs, 1, out_filters, stride=1, padding='SAME', data_format=self.data_format)
       x = batch_norm(x, is_training, data_format=self.data_format)
-      x = tf.nn.relu(x)
+      x = qmodules.activation(x)
 
     with tf.variable_scope("out_conv_{}".format(filter_size)):
-      if start_idx is None:
-        if separable:
-          w_depth = create_weight(
-            "w_depth", [self.filter_size, self.filter_size, out_filters, ch_mul])
-          w_point = create_weight("w_point", [1, 1, out_filters * ch_mul, count])
-          x = tf.nn.separable_conv2d(x, w_depth, w_point, strides=[1, 1, 1, 1],
-                                     padding="SAME", data_format=self.data_format)
-          x = batch_norm(x, is_training, data_format=self.data_format)
-        else:
-          w = create_weight("w", [filter_size, filter_size, inp_c, count])
-          x = tf.nn.conv2d(x, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
-          x = batch_norm(x, is_training, data_format=self.data_format)
+      assert start_idx == None or (start_idx == 0 and out_filters == count), 'NO whole_channel !!!'
+      if separable:
+        x = qmodules.depth_conv(x, self.filter_size, ch_mul, out_filters, stride=1, padding='SAME', data_format=self.data_format)
+        x = batch_norm(x, is_training, data_format=self.data_format)
       else:
-        if separable:
-          w_depth = create_weight("w_depth", [filter_size, filter_size, out_filters, ch_mul])
-          w_point = create_weight("w_point", [out_filters, out_filters * ch_mul])
-          w_point = w_point[start_idx:start_idx+count, :]
-          w_point = tf.transpose(w_point, [1, 0])
-          w_point = tf.reshape(w_point, [1, 1, out_filters * ch_mul, count])
-
-          x = tf.nn.separable_conv2d(x, w_depth, w_point, strides=[1, 1, 1, 1],
-                                     padding="SAME", data_format=self.data_format)
-          mask = tf.range(0, out_filters, dtype=tf.int32)
-          mask = tf.logical_and(start_idx <= mask, mask < start_idx + count)
-          x = batch_norm_with_mask(
-            x, is_training, mask, out_filters, data_format=self.data_format)
-        else:
-          w = create_weight("w", [filter_size, filter_size, out_filters, out_filters])
-          w = tf.transpose(w, [3, 0, 1, 2])
-          w = w[start_idx:start_idx+count, :, :, :]
-          w = tf.transpose(w, [1, 2, 3, 0])
-          x = tf.nn.conv2d(x, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
-          mask = tf.range(0, out_filters, dtype=tf.int32)
-          mask = tf.logical_and(start_idx <= mask, mask < start_idx + count)
-          x = batch_norm_with_mask(
-            x, is_training, mask, out_filters, data_format=self.data_format)
-      x = tf.nn.relu(x)
+        x = qmodules.conv(x, filter_size, count, stride=1, padding='SAME', data_format=self.data_format)
+        x = batch_norm(x, is_training, data_format=self.data_format)
+      x = qmodules.activation(x)
     return x
 
   def _pool_branch(self, inputs, is_training, count, avg_or_max, start_idx=None):
@@ -570,10 +518,9 @@ class GeneralChild(Model):
       inp_c = inputs.get_shape()[1].value
 
     with tf.variable_scope("conv_1"):
-      w = create_weight("w", [1, 1, inp_c, self.out_filters])
-      x = tf.nn.conv2d(inputs, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
+      x = qmodules.conv(inputs, 1, self.out_filters, stride=1, padding='SAME', data_format=self.data_format)
       x = batch_norm(x, is_training, data_format=self.data_format)
-      x = tf.nn.relu(x)
+      x = qmodules.activation(x)
 
     with tf.variable_scope("pool"):
       if self.data_format == "NHWC":
@@ -582,11 +529,9 @@ class GeneralChild(Model):
         actual_data_format = "channels_first"
 
       if avg_or_max == "avg":
-        x = tf.layers.average_pooling2d(
-          x, [3, 3], [1, 1], "SAME", data_format=actual_data_format)
+        x = qmodules.pool(x, 'AVG', 3, 1, padding='SAME', data_format=self.data_format)
       elif avg_or_max == "max":
-        x = tf.layers.max_pooling2d(
-          x, [3, 3], [1, 1], "SAME", data_format=actual_data_format)
+        x = qmodules.pool(x, 'MAX', 3, 1, padding='SAME', data_format=self.data_format)
       else:
         raise ValueError("Unknown pool {}".format(avg_or_max))
 
@@ -641,7 +586,9 @@ class GeneralChild(Model):
       optim_algo=self.optim_algo,
       sync_replicas=self.sync_replicas,
       num_aggregate=self.num_aggregate,
-      num_replicas=self.num_replicas)
+      num_replicas=self.num_replicas,
+      bitsW=self.bitsW,
+      bitsG=self.bitsG)
 
   # override
   def _build_valid(self):

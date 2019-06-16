@@ -6,6 +6,7 @@ import sys
 import numpy as np
 import tensorflow as tf
 
+import src.cifar10.modules as qmodules
 
 user_flags = []
 
@@ -125,7 +126,7 @@ def get_train_ops(
     moving_average: store the moving average of parameters
   """
 
-  if l2_reg > 0 and if bitsW == 32:
+  if l2_reg > 0 and bitsW == 32:
     l2_losses = []
     for var in tf_variables:
       name_lowcase = var.op.name.lower()
@@ -252,8 +253,7 @@ def get_train_ops(
     opt = tf.contrib.opt.MovingAverageOptimizer(
       opt, average_decay=moving_average)
   
-  # TODO: connect W_clip_op
-  with tf.control_dependencies(W_clip_op):
+  with tf.control_dependencies(qmodules.W_clip_op):
     train_op = opt.apply_gradients(
       zip(grads, tf_variables), global_step=train_step)
 
