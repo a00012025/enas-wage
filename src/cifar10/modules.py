@@ -1,7 +1,12 @@
-import tensorflow as tf
 import Quantize
 import myInitializer
+import Option
+
+import tensorflow as tf
 from tensorflow.contrib.layers import batch_norm
+
+W_q_op = []
+W_clip_op = []
 
 def arr(stride_or_ksize):
   # data format NCHW
@@ -20,11 +25,10 @@ def get_variable(shape, name):
     # print 'W:', W[-1].device, scope, shape,
     if Quantize.bitsW <= 16:
       # manually clip and quantize W if needed
-      # W_q_op.append(tf.assign(W[-1], Quantize.Q(W[-1], Quantize.bitsW)))
-      # W_clip_op.append(tf.assign(W[-1],Quantize.C(W[-1],Quantize.bitsW)))
+      W_q_op.append(tf.assign(w, Quantize.Q(w, Quantize.bitsW)))
+      W_clip_op.append(tf.assign(w,Quantize.C(w, Quantize.bitsW)))
 
-      # scale = Option.W_scale[len(W)-1]
-      scale = 1.0
+      scale = Option.W_scale[-1]
       print 'Scale:%d' % scale
       return Quantize.W(w, scale)
       # return W_q[-1]
@@ -57,7 +61,7 @@ def fc(x, c_out, name='fc'):
   return x
 
 def batch_norm(x, is_training, data_format='NCHW'):
-  x = batch_norm(x, center=True, scale=True, is_training=is_training, decay=0.9, epsilon=1e-5, fused=True, data_format=data_format)
+  x = tf.contrib.layers.batch_norm(x, center=True, scale=True, is_training=is_training, decay=0.9, epsilon=1e-5, fused=True, data_format=data_format)
   # H.append(x)
   return x
 
