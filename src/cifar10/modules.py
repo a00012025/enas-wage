@@ -8,9 +8,14 @@ from tensorflow.contrib.layers import batch_norm
 W_q_op = []
 W_clip_op = []
 
-def arr(stride_or_ksize):
+def arr(stride_or_ksize, data_format='NCHW'):
   # data format NCHW
-  return [1, 1, stride_or_ksize, stride_or_ksize]
+  if data_format == 'NCHW':
+    return [1, 1, stride_or_ksize, stride_or_ksize]
+  elif data_format == 'NHWC':
+    return [1, stride_or_ksize, stride_or_ksize, 1]
+  else:
+      raise NotImplementedError
 
 def get_variable(shape, name):
   with tf.name_scope(name) as scope:
@@ -49,7 +54,7 @@ def depth_conv(x, ksize, c_mul, c_out, stride=1, padding='SAME', data_format='NC
   c_in = x.get_shape().as_list()[1]
   W_depth = get_variable([ksize, ksize, c_in, c_mul], name+'-depth')
   W_point = get_variable([1, 1, c_in * c_mul, c_out], name+'-point')
-  x = tf.nn.separable_conv2d(x, W_depth, W_point, arr(stride), padding=padding, data_format=data_format, name=name)
+  x = tf.nn.separable_conv2d(x, W_depth, W_point, arr(stride, data_format), padding=padding, data_format=data_format, name=name)
   # H.append(x)
   return x
 
@@ -67,9 +72,11 @@ def batch_norm(x, is_training, data_format='NCHW'):
 
 def pool(x, mtype, ksize, stride=1, padding='SAME', data_format='NCHW'):
   if mtype == 'MAX':
-    x = tf.nn.max_pool(x, arr(ksize), arr(stride), padding=padding, data_format=data_format)
+    x = tf.nn.max_pool(x, arr(ksize, data_format), arr(stride, data_format), 
+                       padding=padding, data_format=data_format)
   elif mtype == 'AVG':
-    x = tf.nn.avg_pool(x, arr(ksize), arr(stride), padding=padding, data_format=data_format)
+    x = tf.nn.avg_pool(x, arr(ksize, data_format), arr(stride, data_format),
+                       padding=padding, data_format=data_format)
   else:
     assert False, ('Invalid pooling type:' + mtype)
   # H.append(x)
