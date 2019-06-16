@@ -171,7 +171,7 @@ def get_ops(images, labels):
       entropy_weight=FLAGS.controller_entropy_weight,
       bl_dec=FLAGS.controller_bl_dec,
       use_critic=FLAGS.controller_use_critic,
-      optim_algo="adam",
+      optim_algo="sgd",
       sync_replicas=FLAGS.controller_sync_replicas,
       num_aggregate=FLAGS.controller_num_aggregate,
       num_replicas=FLAGS.controller_num_replicas)
@@ -250,7 +250,6 @@ def train():
     with tf.train.SingularMonitoredSession(
       config=config, hooks=hooks, checkpoint_dir=FLAGS.output_dir) as sess:
         start_time = time.time()
-        print('------------- qmodules W_q_op:', qmodules.W_q_op, '---------------')
         sess.run(qmodules.W_q_op)
         while True:
           run_ops = [

@@ -491,7 +491,7 @@ class GeneralChild(Model):
     with tf.variable_scope("out_conv_{}".format(filter_size)):
       assert start_idx == None or (start_idx == 0 and out_filters == count), 'NO whole_channel !!!'
       if separable:
-        x = qmodules.depth_conv(x, self.filter_size, ch_mul, out_filters, stride=1, padding='SAME', data_format=self.data_format)
+        x = qmodules.depth_conv(x, filter_size, ch_mul, out_filters, stride=1, padding='SAME', data_format=self.data_format)
         x = batch_norm(x, is_training, data_format=self.data_format)
       else:
         x = qmodules.conv(x, filter_size, count, stride=1, padding='SAME', data_format=self.data_format)

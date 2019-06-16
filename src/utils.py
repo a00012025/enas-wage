@@ -85,14 +85,15 @@ def count_model_params(tf_variables):
     num_vars += np.prod([dim.value for dim in var.get_shape()])
   return num_vars
 
-def quantizeGrads(Grads, lr):
+def quantizeGrads(Grads, variables, lr):
   if Option.bitsG <= 16:
     grads = []
-    for grad in Grads:
-      if grad is None:
-        grads.append(0.0)
+    for i in range(len(Grads)):
+      if not variables[i].name.startswith('controller'):
+        print(Grads[i])
+        grads.append(Quantize.G(Grads[i], lr))
       else:
-        grads.append(Quantize.G(grad, lr))
+        grads.append(Grads[i])
     return grads
   return Grads
 
@@ -129,7 +130,6 @@ def get_train_ops(
     clip_mode: "global", "norm", or None.
     moving_average: store the moving average of parameters
   """
-
   if l2_reg > 0 and bitsW == 32:
     l2_losses = []
     for var in tf_variables:
@@ -184,8 +184,9 @@ def get_train_ops(
   grads = tf.gradients(loss, tf_variables)
   for i in range(len(tf_variables)):
     if grads[i] == None:
-      print('No Gradient!!', tf_variables[i])
-  grads = quantizeGrads(grads, learning_rate)
+      # print('No Gradient!!', tf_variables[i])
+      grads[i] = tf.zeros_like(tf_variables[i])
+  grads = quantizeGrads(grads, tf_variables, learning_rate)
   grad_norm = tf.global_norm(grads)
 
   grad_norms = {}

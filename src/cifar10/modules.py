@@ -38,13 +38,13 @@ def get_variable(shape, name):
       raise NotImplementedError
 
 def conv(x, ksize, c_out, stride=1, padding='SAME', data_format='NCHW', name='conv'):
-  c_in = x.get_shape()[1 if data_format=='NCHW' else 3]
+  c_in = x.get_shape().as_list()[1 if data_format=='NCHW' else 3]
   W = get_variable([ksize, ksize, c_in, c_out], name)
   x = tf.nn.conv2d(x, W, arr(stride, data_format), padding=padding, data_format=data_format, name=name)
   return x
 
 def depth_conv(x, ksize, c_mul, c_out, stride=1, padding='SAME', data_format='NCHW', name='depth_conv'):
-  c_in = x.get_shape()[1 if data_format=='NCHW' else 3]
+  c_in = x.get_shape().as_list()[1 if data_format=='NCHW' else 3]
   W_depth = get_variable([ksize, ksize, c_in, c_mul], name+'-depth')
   W_point = get_variable([1, 1, c_in * c_mul, c_out], name+'-point')
   x = tf.nn.separable_conv2d(x, W_depth, W_point, arr(stride, data_format), padding=padding, data_format=data_format, name=name)
