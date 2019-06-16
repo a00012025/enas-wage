@@ -225,7 +225,6 @@ def train():
     ops = get_ops(images, labels)
     child_ops = ops["child"]
     controller_ops = ops["controller"]
-
     saver = tf.train.Saver(max_to_keep=2)
     checkpoint_saver_hook = tf.train.CheckpointSaverHook(
       FLAGS.output_dir, save_steps=child_ops["num_train_batches"], saver=saver)
@@ -245,6 +244,8 @@ def train():
     with tf.train.SingularMonitoredSession(
       config=config, hooks=hooks, checkpoint_dir=FLAGS.output_dir) as sess:
         start_time = time.time()
+        # TODO: connect W_q_op
+        sess.run(W_q_op)
         while True:
           run_ops = [
             child_ops["loss"],

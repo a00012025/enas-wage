@@ -82,6 +82,14 @@ def count_model_params(tf_variables):
     num_vars += np.prod([dim.value for dim in var.get_shape()])
   return num_vars
 
+def quantizeGrads(bitsG, Grads, lr):
+  if bitsG <= 16:
+    grads = []
+    for grad in Grads:
+      # TODO: connect Quantize.G
+      grads.append(Quantize.G(grad, lr))
+    return grads
+  return Grads
 
 def get_train_ops(
     loss,
@@ -108,49 +116,25 @@ def get_train_ops(
     num_aggregate=None,
     num_replicas=None,
     get_grad_norms=False,
-    moving_average=None):
+    moving_average=None,
+    bitsW=2,
+    bitsG=8):
   """
   Args:
     clip_mode: "global", "norm", or None.
     moving_average: store the moving average of parameters
   """
 
-  if l2_reg > 0:
+  if l2_reg > 0 and if bitsW == 32:
     l2_losses = []
     for var in tf_variables:
-      l2_losses.append(tf.reduce_sum(var ** 2))
+      name_lowcase = var.op.name.lower()
+      if name_lowcase.find('fc') > -1 or name_lowcase.find('conv') > -1:
+        l2_losses.append(tf.reduce_sum(var ** 2))
     l2_loss = tf.add_n(l2_losses)
     loss += l2_reg * l2_loss
 
-  grads = tf.gradients(loss, tf_variables)
-  grad_norm = tf.global_norm(grads)
-
-  grad_norms = {}
-  for v, g in zip(tf_variables, grads):
-    if v is None or g is None:
-      continue
-    if isinstance(g, tf.IndexedSlices):
-      grad_norms[v.name] = tf.sqrt(tf.reduce_sum(g.values ** 2))
-    else:
-      grad_norms[v.name] = tf.sqrt(tf.reduce_sum(g ** 2))
-
-  if clip_mode is not None:
-    assert grad_bound is not None, "Need grad_bound to clip gradients."
-    if clip_mode == "global":
-      grads, _ = tf.clip_by_global_norm(grads, grad_bound)
-    elif clip_mode == "norm":
-      clipped = []
-      for g in grads:
-        if isinstance(g, tf.IndexedSlices):
-          c_g = tf.clip_by_norm(g.values, grad_bound)
-          c_g = tf.IndexedSlices(g.indices, c_g)
-        else:
-          c_g = tf.clip_by_norm(g, grad_bound)
-        clipped.append(g)
-      grads = clipped
-    else:
-      raise NotImplementedError("Unknown clip_mode {}".format(clip_mode))
-  
+  # Learning rate
   if lr_cosine:
     assert lr_max is not None, "Need lr_max to use lr_cosine"
     assert lr_min is not None, "Need lr_min to use lr_cosine"
@@ -192,6 +176,37 @@ def get_train_ops(
     learning_rate = tf.cond(tf.less(train_step, lr_warmup_steps),
                             lambda: lr_warmup_val, lambda: learning_rate)
 
+  # TODO
+  grads = tf.gradients(loss, tf_variables)
+  grads = quantizeGrads(bitsG, grads, learning_rate)
+  grad_norm = tf.global_norm(grads)
+
+  grad_norms = {}
+  for v, g in zip(tf_variables, grads):
+    if v is None or g is None:
+      continue
+    if isinstance(g, tf.IndexedSlices):
+      grad_norms[v.name] = tf.sqrt(tf.reduce_sum(g.values ** 2))
+    else:
+      grad_norms[v.name] = tf.sqrt(tf.reduce_sum(g ** 2))
+
+  if clip_mode is not None:
+    assert grad_bound is not None, "Need grad_bound to clip gradients."
+    if clip_mode == "global":
+      grads, _ = tf.clip_by_global_norm(grads, grad_bound)
+    elif clip_mode == "norm":
+      clipped = []
+      for g in grads:
+        if isinstance(g, tf.IndexedSlices):
+          c_g = tf.clip_by_norm(g.values, grad_bound)
+          c_g = tf.IndexedSlices(g.indices, c_g)
+        else:
+          c_g = tf.clip_by_norm(g, grad_bound)
+        clipped.append(g)
+      grads = clipped
+    else:
+      raise NotImplementedError("Unknown clip_mode {}".format(clip_mode))
+
   # if get_grad_norms:
   #   g_1, g_2 = 0.0001, 0.0001
   #   for v, g in zip(tf_variables, grads):
@@ -210,13 +225,16 @@ def get_train_ops(
   #                            message="g_1, g_2, g_1/g_2: ", summarize=5)
 
   if optim_algo == "momentum":
-    opt = tf.train.MomentumOptimizer(
-      learning_rate, 0.9, use_locking=True, use_nesterov=True)
+    raise ValueError("Not supported to run WAGE")
+    # opt = tf.train.MomentumOptimizer(
+    #   learning_rate, 0.9, use_locking=True, use_nesterov=True)
   elif optim_algo == "sgd":
-    opt = tf.train.GradientDescentOptimizer(learning_rate, use_locking=True)
+    # Learning rate is applied in Quantize.G
+    opt = tf.train.GradientDescentOptimizer(1, use_locking=True)
   elif optim_algo == "adam":
-    opt = tf.train.AdamOptimizer(learning_rate, beta1=0.0, epsilon=1e-3,
-                                 use_locking=True)
+    raise ValueError("Not supported to run WAGE")
+    # opt = tf.train.AdamOptimizer(learning_rate, beta1=0.0, epsilon=1e-3,
+    #                              use_locking=True)
   else:
     raise ValueError("Unknown optim_algo {}".format(optim_algo))
 
@@ -233,9 +251,11 @@ def get_train_ops(
   if moving_average is not None:
     opt = tf.contrib.opt.MovingAverageOptimizer(
       opt, average_decay=moving_average)
-
-  train_op = opt.apply_gradients(
-    zip(grads, tf_variables), global_step=train_step)
+  
+  # TODO: connect W_clip_op
+  with tf.control_dependencies(W_clip_op):
+    train_op = opt.apply_gradients(
+      zip(grads, tf_variables), global_step=train_step)
 
   if get_grad_norms:
     return train_op, learning_rate, grad_norm, opt, grad_norms

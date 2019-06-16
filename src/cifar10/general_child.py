@@ -240,6 +240,10 @@ class GeneralChild(Model):
           raise ValueError("Unknown data_format {0}".format(self.data_format))
         w = create_weight("w", [inp_c, 10])
         x = tf.matmul(x, w)
+    # for last layer(first layer in backpro) error input quantization
+    with tf.variable_scope('lastQE'):
+      # TODO
+      x = _QE(x)
     return x
 
   def _enas_layer(self, layer_id, prev_layers, start_idx, out_filters, is_training):
@@ -598,12 +602,13 @@ class GeneralChild(Model):
   def _build_train(self):
     print("-" * 80)
     print("Build train graph")
-    logits = self._model(self.x_train, is_training=True)
-    log_probs = tf.nn.sparse_softmax_cross_entropy_with_logits(
-      logits=logits, labels=self.y_train)
-    self.loss = tf.reduce_mean(log_probs)
+    output = self._model(self.x_train, is_training=True)
+    # update loss to SSE
+    label_onehot = tf.cast(tf.one_hot(self.y_train, 10), tf.float32)
+    with tf.name_scope('loss'):
+      self.loss = 0.5 * tf.reduce_sum(tf.square(label_onehot - output))
 
-    self.train_preds = tf.argmax(logits, axis=1)
+    self.train_preds = tf.argmax(output, axis=1)
     self.train_preds = tf.to_int32(self.train_preds)
     self.train_acc = tf.equal(self.train_preds, self.y_train)
     self.train_acc = tf.to_int32(self.train_acc)
@@ -643,8 +648,8 @@ class GeneralChild(Model):
     if self.x_valid is not None:
       print("-" * 80)
       print("Build valid graph")
-      logits = self._model(self.x_valid, False, reuse=True)
-      self.valid_preds = tf.argmax(logits, axis=1)
+      output = self._model(self.x_valid, False, reuse=True)
+      self.valid_preds = tf.argmax(output, axis=1)
       self.valid_preds = tf.to_int32(self.valid_preds)
       self.valid_acc = tf.equal(self.valid_preds, self.y_valid)
       self.valid_acc = tf.to_int32(self.valid_acc)
@@ -654,8 +659,8 @@ class GeneralChild(Model):
   def _build_test(self):
     print("-" * 80)
     print("Build test graph")
-    logits = self._model(self.x_test, False, reuse=True)
-    self.test_preds = tf.argmax(logits, axis=1)
+    output = self._model(self.x_test, False, reuse=True)
+    self.test_preds = tf.argmax(output, axis=1)
     self.test_preds = tf.to_int32(self.test_preds)
     self.test_acc = tf.equal(self.test_preds, self.y_test)
     self.test_acc = tf.to_int32(self.test_acc)
@@ -694,8 +699,8 @@ class GeneralChild(Model):
         x_valid_shuffle = tf.map_fn(
           _pre_process, x_valid_shuffle, back_prop=False)
 
-    logits = self._model(x_valid_shuffle, False, reuse=True)
-    valid_shuffle_preds = tf.argmax(logits, axis=1)
+    output = self._model(x_valid_shuffle, False, reuse=True)
+    valid_shuffle_preds = tf.argmax(output, axis=1)
     valid_shuffle_preds = tf.to_int32(valid_shuffle_preds)
     self.valid_shuffle_acc = tf.equal(valid_shuffle_preds, y_valid_shuffle)
     self.valid_shuffle_acc = tf.to_int32(self.valid_shuffle_acc)
