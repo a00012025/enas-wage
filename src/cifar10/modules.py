@@ -70,6 +70,24 @@ def batch_norm(x, is_training, data_format='NCHW'):
   # H.append(x)
   return x
 
+def QA(x):
+  if Option.bitsA <= 16:
+    x = Quantize.A(x)
+    # H.append(x)
+  return x
+
+def QE(x):
+  if Option.bitsE <= 16:
+    x = Quantize.E(x)
+    # H.append(x)
+  return x
+
+def activation(x):
+  x = tf.nn.relu(x)
+  x = QE(x)
+  x = QA(x)
+  return x
+
 def pool(x, mtype, ksize, stride=1, padding='SAME', data_format='NCHW'):
   if mtype == 'MAX':
     x = tf.nn.max_pool(x, arr(ksize, data_format), arr(stride, data_format), 
@@ -87,5 +105,6 @@ if __name__ == '__main__':
     x_conv = conv(x, 3, 5)
     x_depth_conv = depth_conv(x, 3, 4, 5)
     x_batch_norm = batch_norm(x, True)
+    x_actv = activation(x)
     y = tf.placeholder(tf.float32, shape=[1, 32])
     y_fc = fc(y, 64)
