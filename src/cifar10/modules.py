@@ -65,6 +65,16 @@ def batch_norm(x, is_training, data_format='NCHW'):
   # H.append(x)
   return x
 
+def pool(x, mtype, ksize, stride=1, padding='SAME'):
+  if mtype == 'MAX':
+    x = tf.nn.max_pool(x, arr(ksize), arr(stride), padding=padding, data_format='NCHW')
+  elif mtype == 'AVG':
+    x = tf.nn.avg_pool(x, arr(ksize), arr(stride), padding=padding, data_format='NCHW')
+  else:
+    assert False, ('Invalid pooling type:' + mtype)
+  # self.H.append(x)
+  return x
+
 if __name__ == '__main__':
     x = tf.placeholder(tf.float32, shape=[1, 3, 32, 32])
     x_conv = conv(x, 3, 5)
