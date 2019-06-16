@@ -38,18 +38,18 @@ def get_variable(shape, name):
     #   print ''
     #   return W[-1]
 
-def conv(x, ksize, c_out, stride=1, padding='SAME', name='conv'):
+def conv(x, ksize, c_out, stride=1, padding='SAME', data_format='NCHW', name='conv'):
   c_in = x.get_shape().as_list()[1]
   W = get_variable([ksize, ksize, c_in, c_out], name)
-  x = tf.nn.conv2d(x, W, arr(stride), padding=padding, data_format='NCHW', name=name)
+  x = tf.nn.conv2d(x, W, arr(stride), padding=padding, data_format=data_format, name=name)
   # H.append(x)
   return x
 
-def depth_conv(x, ksize, c_mul, c_out, stride=1, padding='SAME', name='depth_conv'):
+def depth_conv(x, ksize, c_mul, c_out, stride=1, padding='SAME', data_format='NCHW', name='depth_conv'):
   c_in = x.get_shape().as_list()[1]
   W_depth = get_variable([ksize, ksize, c_in, c_mul], name+'-depth')
   W_point = get_variable([1, 1, c_in * c_mul, c_out], name+'-point')
-  x = tf.nn.separable_conv2d(x, W_depth, W_point, arr(stride), padding=padding, data_format='NCHW', name=name)
+  x = tf.nn.separable_conv2d(x, W_depth, W_point, arr(stride), padding=padding, data_format=data_format, name=name)
   # H.append(x)
   return x
 
@@ -65,14 +65,14 @@ def batch_norm(x, is_training, data_format='NCHW'):
   # H.append(x)
   return x
 
-def pool(x, mtype, ksize, stride=1, padding='SAME'):
+def pool(x, mtype, ksize, stride=1, padding='SAME', data_format='NCHW'):
   if mtype == 'MAX':
-    x = tf.nn.max_pool(x, arr(ksize), arr(stride), padding=padding, data_format='NCHW')
+    x = tf.nn.max_pool(x, arr(ksize), arr(stride), padding=padding, data_format=data_format)
   elif mtype == 'AVG':
-    x = tf.nn.avg_pool(x, arr(ksize), arr(stride), padding=padding, data_format='NCHW')
+    x = tf.nn.avg_pool(x, arr(ksize), arr(stride), padding=padding, data_format=data_format)
   else:
     assert False, ('Invalid pooling type:' + mtype)
-  # self.H.append(x)
+  # H.append(x)
   return x
 
 if __name__ == '__main__':
