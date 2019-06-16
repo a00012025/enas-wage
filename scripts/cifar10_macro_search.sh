@@ -2,7 +2,7 @@
 
 export PYTHONPATH="$(pwd)"
 
-python src/cifar10/main.py \
+python2 src/cifar10/main.py \
   --data_format="NCHW" \
   --search_for="macro" \
   --reset_output_dir \

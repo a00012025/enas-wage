@@ -1,51 +1,70 @@
 import tensorflow as tf
 import Quantize
+import myInitializer
+from tensorflow.contrib.layers import batch_norm
 
+def arr(stride_or_ksize):
+  # data format NCHW
+  return [1, 1, stride_or_ksize, stride_or_ksize]
 
-def _get_variable(self, shape, name):
+def get_variable(shape, name):
   with tf.name_scope(name) as scope:
-    # self.W.append(tf.get_variable(name=name, shape=shape, initializer=self.initializer))
+    # W.append(tf.get_variable(name=name, shape=shape, initializer=initializer))
+    w = tf.get_variable(
+        name=name, shape=shape,
+        initializer=myInitializer.variance_scaling_initializer(
+            factor=1.0, mode='FAN_IN', uniform=True
+        )
+    )
 
-    # print 'W:', self.W[-1].device, scope, shape,
+    # print 'W:', W[-1].device, scope, shape,
     if Quantize.bitsW <= 16:
       # manually clip and quantize W if needed
-      # self.W_q_op.append(tf.assign(self.W[-1], Quantize.Q(self.W[-1], Quantize.bitsW)))
-      # self.W_clip_op.append(tf.assign(self.W[-1],Quantize.C(self.W[-1],Quantize.bitsW)))
+      # W_q_op.append(tf.assign(W[-1], Quantize.Q(W[-1], Quantize.bitsW)))
+      # W_clip_op.append(tf.assign(W[-1],Quantize.C(W[-1],Quantize.bitsW)))
 
-      # scale = Option.W_scale[len(self.W)-1]
+      # scale = Option.W_scale[len(W)-1]
       scale = 1.0
       print 'Scale:%d' % scale
-      return Quantize.W(self.W[-1], scale)
-      # return self.W_q[-1]
-    else
+      return Quantize.W(w, scale)
+      # return W_q[-1]
+    else:
       raise NotImplementedError
     #   a
     #   print ''
-    #   return self.W[-1]
+    #   return W[-1]
 
-def _conv(self, x, ksize, c_out, stride=1, padding='SAME', name='conv'):
+def conv(x, ksize, c_out, stride=1, padding='SAME', name='conv'):
   c_in = x.get_shape().as_list()[1]
-  W = self._get_variable([ksize, ksize, c_in, c_out], name)
-  x = tf.nn.conv2d(x, W, self._arr(stride), padding=padding, data_format='NCHW', name=name)
-  # self.H.append(x)
+  W = get_variable([ksize, ksize, c_in, c_out], name)
+  x = tf.nn.conv2d(x, W, arr(stride), padding=padding, data_format='NCHW', name=name)
+  # H.append(x)
   return x
 
-def _depth_conv(self, x, ksize, c_mul, c_out, stride=1, padding='SAME', name='conv'):
+def depth_conv(x, ksize, c_mul, c_out, stride=1, padding='SAME', name='depth_conv'):
   c_in = x.get_shape().as_list()[1]
-  W_depth = self._get_variable([ksize, ksize, c_in, c_mul], name)
-  W_point = self._get_variable([1, 1, c_in * c_mul, c_out], name)
-  x = tf.nn.separable_conv2d(x, W_depth, W_point, self._arr(stride), padding=padding, data_format='NCHW', name=name)
-  # self.H.append(x)
+  W_depth = get_variable([ksize, ksize, c_in, c_mul], name+'-depth')
+  W_point = get_variable([1, 1, c_in * c_mul, c_out], name+'-point')
+  x = tf.nn.separable_conv2d(x, W_depth, W_point, arr(stride), padding=padding, data_format='NCHW', name=name)
+  # H.append(x)
   return x
 
-def _fc(self, x, c_out, name='fc'):
+def fc(x, c_out, name='fc'):
   c_in = x.get_shape().as_list()[1]
-  W = self._get_variable([c_in, c_out], name)
+  W = get_variable([c_in, c_out], name)
   x = tf.matmul(x, W)
-  # self.H.append(x)
+  # H.append(x)
   return x
 
-def _batch_norm(self, x, data_format='NCHW'):
-  x = batch_norm(x, center=True, scale=True, is_training=self.is_training, decay=0.9, epsilon=1e-5, fused=True, data_format=data_format)
-  # self.H.append(x)
+def batch_norm(x, is_training, data_format='NCHW'):
+  x = batch_norm(x, center=True, scale=True, is_training=is_training, decay=0.9, epsilon=1e-5, fused=True, data_format=data_format)
+  # H.append(x)
   return x
+
+if __name__ == '__main__':
+    x = tf.placeholder(tf.float32, shape=[1, 3, 32, 32])
+    x_conv = conv(x, 3, 5)
+    x_depth_conv = depth_conv(x, 3, 4, 5)
+    x_batch_norm = batch_norm(x, True)
+    y = tf.placeholder(tf.float32, shape=[1, 32])
+    y_fc = fc(y, 64)
