@@ -90,12 +90,13 @@ def quantizeGrads(Grads, variables, lr):
     grads = []
     for i in range(len(Grads)):
       if not variables[i].name.startswith('controller'):
-        print(Grads[i])
+        print('quantize gradient: ', variables[i].name)
         grads.append(Quantize.G(Grads[i], lr))
       else:
         grads.append(Grads[i])
     return grads
-  return Grads
+  else:
+    return Grads
 
 def get_train_ops(
     loss,
@@ -124,17 +125,18 @@ def get_train_ops(
     get_grad_norms=False,
     moving_average=None,
     bitsW=2,
-    bitsG=8):
+    bitsG=8,
+    is_child=False):
   """
   Args:
     clip_mode: "global", "norm", or None.
     moving_average: store the moving average of parameters
   """
-  if l2_reg > 0 and bitsW == 32:
+  if (is_child and l2_reg > 0 and bitsW == 32) or (not is_child and l2_reg > 0):
     l2_losses = []
     for var in tf_variables:
       name_lowcase = var.op.name.lower()
-      if name_lowcase.find('fc') > -1 or name_lowcase.find('conv') > -1:
+      if not is_child or name_lowcase.find('fc') > -1 or name_lowcase.find('conv') > -1:
         l2_losses.append(tf.reduce_sum(var ** 2))
     l2_loss = tf.add_n(l2_losses)
     loss += l2_reg * l2_loss
@@ -185,8 +187,10 @@ def get_train_ops(
   for i in range(len(tf_variables)):
     if grads[i] == None:
       # print('No Gradient!!', tf_variables[i])
+      assert is_child
       grads[i] = tf.zeros_like(tf_variables[i])
-  grads = quantizeGrads(grads, tf_variables, learning_rate)
+  if is_child:
+    grads = quantizeGrads(grads, tf_variables, learning_rate)
   grad_norm = tf.global_norm(grads)
 
   grad_norms = {}
@@ -233,16 +237,21 @@ def get_train_ops(
   #                            message="g_1, g_2, g_1/g_2: ", summarize=5)
 
   if optim_algo == "momentum":
-    raise ValueError("Not supported to run WAGE")
-    # opt = tf.train.MomentumOptimizer(
-    #   learning_rate, 0.9, use_locking=True, use_nesterov=True)
+    if is_child:
+      raise ValueError("Not supported to run WAGE")
+    opt = tf.train.MomentumOptimizer(
+      learning_rate, 0.9, use_locking=True, use_nesterov=True)
   elif optim_algo == "sgd":
     # Learning rate is applied in Quantize.G
-    opt = tf.train.GradientDescentOptimizer(1, use_locking=True)
+    if is_child:
+      opt = tf.train.GradientDescentOptimizer(1, use_locking=True)
+    else:
+      opt = tf.train.GradientDescentOptimizer(learning_rate, use_locking=True)
   elif optim_algo == "adam":
-    raise ValueError("Not supported to run WAGE")
-    # opt = tf.train.AdamOptimizer(learning_rate, beta1=0.0, epsilon=1e-3,
-    #                              use_locking=True)
+    if is_child:
+      raise ValueError("Not supported to run WAGE")
+    opt = tf.train.AdamOptimizer(learning_rate, beta1=0.0, epsilon=1e-3,
+                                 use_locking=True)
   else:
     raise ValueError("Unknown optim_algo {}".format(optim_algo))
 
@@ -260,9 +269,11 @@ def get_train_ops(
     opt = tf.contrib.opt.MovingAverageOptimizer(
       opt, average_decay=moving_average)
   
-  with tf.control_dependencies(qmodules.W_clip_op):
-    train_op = opt.apply_gradients(
-      zip(grads, tf_variables), global_step=train_step)
+  if is_child:
+    with tf.control_dependencies(qmodules.W_clip_op):
+      train_op = opt.apply_gradients(zip(grads, tf_variables), global_step=train_step)
+  else:
+    train_op = opt.apply_gradients(zip(grads, tf_variables), global_step=train_step)
 
   if get_grad_norms:
     return train_op, learning_rate, grad_norm, opt, grad_norms

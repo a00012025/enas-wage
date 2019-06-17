@@ -171,7 +171,7 @@ def get_ops(images, labels):
       entropy_weight=FLAGS.controller_entropy_weight,
       bl_dec=FLAGS.controller_bl_dec,
       use_critic=FLAGS.controller_use_critic,
-      optim_algo="sgd",
+      optim_algo="adam",
       sync_replicas=FLAGS.controller_sync_replicas,
       num_aggregate=FLAGS.controller_num_aggregate,
       num_replicas=FLAGS.controller_num_replicas)

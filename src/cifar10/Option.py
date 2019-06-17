@@ -16,7 +16,7 @@ loadModel = None
 saveModel = './model'
 # saveModel = '../model/' + Time + '(' + Notes + ')' + '.tf'
 
-bitsW = 2  # bit width of we ights
+bitsW = 2  # bit width of weights
 bitsA = 8  # bit width of activations
 bitsG = 8  # bit width of gradients
 bitsE = 8  # bit width of errors

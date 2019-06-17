@@ -546,10 +546,12 @@ class GeneralChild(Model):
     print("-" * 80)
     print("Build train graph")
     output = self._model(self.x_train, is_training=True)
+    self.feature_output = output
     # update loss to SSE
     label_onehot = tf.cast(tf.one_hot(self.y_train, 10), tf.float32)
     with tf.name_scope('loss'):
-      self.loss = 0.5 * tf.reduce_sum(tf.square(label_onehot - output))
+      # TODO: change to reduce_mean?
+      self.loss = 0.5 * tf.reduce_sum(tf.abs(label_onehot - output))
 
     self.train_preds = tf.argmax(output, axis=1)
     self.train_preds = tf.to_int32(self.train_preds)
@@ -586,7 +588,8 @@ class GeneralChild(Model):
       num_aggregate=self.num_aggregate,
       num_replicas=self.num_replicas,
       bitsW=self.bitsW,
-      bitsG=self.bitsG)
+      bitsG=self.bitsG,
+      is_child=True)
 
   # override
   def _build_valid(self):
