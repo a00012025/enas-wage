@@ -18,7 +18,7 @@ def _read_data(data_path, train_files):
     full_name = os.path.join(data_path, file_name)
     with open(full_name) as finp:
       data = pickle.load(finp)
-      batch_images = data["data"].astype(np.float32) / 255.0
+      batch_images = data["data"].astype(np.float32)
       batch_labels = np.array(data["labels"], dtype=np.int32)
       images.append(batch_images)
       labels.append(batch_labels)
@@ -66,10 +66,13 @@ def read_data(data_path, num_valids=5000):
   print "mean: {}".format(np.reshape(mean * 255.0, [-1]))
   print "std: {}".format(np.reshape(std * 255.0, [-1]))
 
-  images["train"] = (images["train"] - mean) / std
+  images["train"] = images["train"] / 127.5 - 1
+  # images["train"] = (images["train"] - mean) / std
   if num_valids:
-    images["valid"] = (images["valid"] - mean) / std
-  images["test"] = (images["test"] - mean) / std
+    images["valid"] = images["valid"] / 127.5 - 1
+    # images["valid"] = (images["valid"] - mean) / std
+  images["test"] = images["test"] / 127.5 - 1
+  # images["test"] = (images["test"] - mean) / std
 
   return images, labels
 
