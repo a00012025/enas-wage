@@ -85,6 +85,10 @@ class GeneralChild(Model):
     self.lr_min = lr_min
     self.lr_T_0 = lr_T_0
     self.lr_T_mul = lr_T_mul
+    self.lr_init = lr_init
+    self.lr_dec_start = lr_dec_start
+    self.lr_dec_every = lr_dec_every
+    self.lr_dec_rate = lr_dec_rate
     self.out_filters = out_filters * out_filters_scale
     self.num_layers = num_layers
 
