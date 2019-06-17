@@ -10,10 +10,10 @@ python2 src/cifar10/main.py \
   --output_dir="outputs" \
   --batch_size=128 \
   --num_epochs=310 \
-  --log_every=1 \
+  --log_every=50 \
   --eval_every_epochs=1 \
   --child_use_aux_heads \
-  --child_num_layers=6 \
+  --child_num_layers=12 \
   --child_out_filters=36 \
   --child_l2_reg=0.00025 \
   --child_num_branches=6 \
@@ -21,9 +21,9 @@ python2 src/cifar10/main.py \
   --child_keep_prob=0.90 \
   --child_drop_path_keep_prob=0.60 \
   --child_lr_cosine \
-  --child_lr_max=0.05 \
-  --child_lr_min=0.0005 \
-  --child_lr_T_0=10 \
+  --child_lr_max=5 \
+  --child_lr_min=0.05 \
+  --child_lr_T_0=20 \
   --child_lr_T_mul=2 \
   --controller_training \
   --controller_search_whole_channels \

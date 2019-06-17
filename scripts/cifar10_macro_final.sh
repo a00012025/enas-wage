@@ -40,16 +40,16 @@ python src/cifar10/main.py \
   --eval_every_epochs=1 \
   --child_fixed_arc="${fixed_arc}" \
   --child_use_aux_heads \
-  --child_num_layers=24 \
+  --child_num_layers=12 \
   --child_out_filters=96 \
   --child_l2_reg=2e-4 \
   --child_num_branches=4 \
   --child_num_cell_layers=5 \
   --child_keep_prob=0.50 \
   --child_lr_cosine \
-  --child_lr_max=0.05 \
-  --child_lr_min=0.001 \
-  --child_lr_T_0=10 \
+  --child_lr_max=5 \
+  --child_lr_min=0.05 \
+  --child_lr_T_0=30 \
   --child_lr_T_mul=2 \
   --nocontroller_training \
   --controller_search_whole_channels \
