@@ -185,8 +185,8 @@ class GeneralChild(Model):
       raise ValueError("Unknown data_format '{0}'".format(self.data_format))
 
   def _model(self, images, is_training, reuse=False):
+    layers = []
     with tf.variable_scope(self.name, reuse=reuse):
-      layers = []
 
       out_filters = self.out_filters
       with tf.variable_scope("stem_conv"):
@@ -234,7 +234,7 @@ class GeneralChild(Model):
         x = Quantize.E(x)
         # TODO: whether needs self.H?
         # self.H.append(x)
-    return x
+    return x, layers
 
   def _enas_layer(self, layer_id, prev_layers, start_idx, out_filters, is_training):
     """
@@ -545,9 +545,8 @@ class GeneralChild(Model):
   def _build_train(self):
     print("-" * 80)
     print("Build train graph")
-    output = self._model(self.x_train, is_training=True)
-    self.feature_output = output
-    # update loss to SSE
+    self.output, self.layers = output, layers = self._model(self.x_train, is_training=True)
+# update loss to SSE
     label_onehot = tf.cast(tf.one_hot(self.y_train, 10), tf.float32)
     with tf.name_scope('loss'):
       # TODO: change to reduce_mean?
@@ -566,7 +565,7 @@ class GeneralChild(Model):
 
     self.global_step = tf.Variable(
       0, dtype=tf.int32, trainable=False, name="global_step")
-    self.train_op, self.lr, self.grad_norm, self.optimizer = get_train_ops(
+    self.train_op, self.lr, self.grad_norm, self.grads, self.optimizer = get_train_ops(
       self.loss,
       tf_variables,
       self.global_step,
@@ -596,7 +595,7 @@ class GeneralChild(Model):
     if self.x_valid is not None:
       print("-" * 80)
       print("Build valid graph")
-      output = self._model(self.x_valid, False, reuse=True)
+      output, layers = self._model(self.x_valid, False, reuse=True)
       self.valid_preds = tf.argmax(output, axis=1)
       self.valid_preds = tf.to_int32(self.valid_preds)
       self.valid_acc = tf.equal(self.valid_preds, self.y_valid)
@@ -607,7 +606,7 @@ class GeneralChild(Model):
   def _build_test(self):
     print("-" * 80)
     print("Build test graph")
-    output = self._model(self.x_test, False, reuse=True)
+    output, layers = self._model(self.x_test, False, reuse=True)
     self.test_preds = tf.argmax(output, axis=1)
     self.test_preds = tf.to_int32(self.test_preds)
     self.test_acc = tf.equal(self.test_preds, self.y_test)
@@ -647,7 +646,7 @@ class GeneralChild(Model):
         x_valid_shuffle = tf.map_fn(
           _pre_process, x_valid_shuffle, back_prop=False)
 
-    output = self._model(x_valid_shuffle, False, reuse=True)
+    output, layers = self._model(x_valid_shuffle, False, reuse=True)
     valid_shuffle_preds = tf.argmax(output, axis=1)
     valid_shuffle_preds = tf.to_int32(valid_shuffle_preds)
     self.valid_shuffle_acc = tf.equal(valid_shuffle_preds, y_valid_shuffle)

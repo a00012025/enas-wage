@@ -299,7 +299,7 @@ class GeneralController(Controller):
     for var in tf_variables:
       print var
 
-    self.train_op, self.lr, self.grad_norm, self.optimizer = get_train_ops(
+    self.train_op, self.lr, self.grad_norm, self.grads, self.optimizer = get_train_ops(
       self.loss,
       tf_variables,
       self.train_step,

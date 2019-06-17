@@ -54,6 +54,22 @@ def A(x):
     y = Q(x, bitsA)
     return x + tf.stop_gradient(y - x)  # skip derivation of Quantize, but keep Clip
 
+def trueG(x, lr=None):
+  xmax = tf.reduce_max(tf.abs(x))
+  x = x / Shift(xmax)
+  if lr == None:
+    lr = LR
+  norm = Q(lr * x, bitsR)
+
+  norm_sign = tf.sign(norm)
+  norm_abs = tf.abs(norm)
+  norm_int = tf.floor(norm_abs)
+  norm_float = norm_abs - norm_int
+  rand_float = tf.random_uniform(x.get_shape(), 0, 1)
+  norm = norm_sign * ( norm_int + 0.5 * (tf.sign(norm_float - rand_float) + 1) )
+
+  return norm / S(bitsG)
+
 def G(x, lr=None):
   with tf.name_scope('QG'):
     if bitsG > 15:
@@ -63,19 +79,8 @@ def G(x, lr=None):
         return x  # batch norm parameters, not quantize now
 
       xmax = tf.reduce_max(tf.abs(x))
-      x = x / Shift(xmax)
-      if lr == None:
-        lr = LR
-      norm = Q(lr * x, bitsR)
 
-      norm_sign = tf.sign(norm)
-      norm_abs = tf.abs(norm)
-      norm_int = tf.floor(norm_abs)
-      norm_float = norm_abs - norm_int
-      rand_float = tf.random_uniform(x.get_shape(), 0, 1)
-      norm = norm_sign * ( norm_int + 0.5 * (tf.sign(norm_float - rand_float) + 1) )
-
-      return norm / S(bitsG)
+      return tf.cond(xmax <= 0, lambda: x, lambda: trueG(x, lr))
 
 @tf.RegisterGradient('Error')
 def error(op, x):

@@ -88,7 +88,9 @@ def count_model_params(tf_variables):
 def quantizeGrads(Grads, variables, lr):
   if Option.bitsG <= 16:
     grads = []
+    print('quantizeGrads', '='*80)
     for i in range(len(Grads)):
+      print(i, Grads[i])
       if not variables[i].name.startswith('controller'):
         print('quantize gradient: ', variables[i].name)
         grads.append(Quantize.G(Grads[i], lr))
@@ -278,5 +280,5 @@ def get_train_ops(
   if get_grad_norms:
     return train_op, learning_rate, grad_norm, opt, grad_norms
   else:
-    return train_op, learning_rate, grad_norm, opt
+    return train_op, learning_rate, grad_norm, grads, opt
 

@@ -55,7 +55,7 @@ DEFINE_integer("child_lr_T_0", None, "for lr schedule")
 DEFINE_integer("child_lr_T_mul", None, "for lr schedule")
 DEFINE_integer("child_cutout_size", None, "CutOut size")
 DEFINE_float("child_grad_bound", 5.0, "Gradient clipping")
-DEFINE_float("child_lr", 0.1, "")
+DEFINE_float("child_lr", 0.0000001, "")
 DEFINE_float("child_lr_dec_rate", 0.1, "")
 DEFINE_float("child_keep_prob", 0.5, "")
 DEFINE_float("child_drop_path_keep_prob", 1.0, "minimum drop_path_keep_prob")
@@ -90,7 +90,7 @@ DEFINE_boolean("controller_sync_replicas", False, "To sync or not to sync.")
 DEFINE_boolean("controller_training", True, "")
 DEFINE_boolean("controller_use_critic", False, "")
 
-DEFINE_integer("log_every", 50, "How many steps to log")
+DEFINE_integer("log_every", 1, "How many steps to log")
 DEFINE_integer("eval_every_epochs", 1, "How many epochs to eval")
 
 DEFINE_float("gpu_ratio", 1, "")
@@ -207,6 +207,9 @@ def get_ops(images, labels):
     "train_acc": child_model.train_acc,
     "optimizer": child_model.optimizer,
     "num_train_batches": child_model.num_train_batches,
+    "output": child_model.output,
+    "layers": child_model.layers,
+    "grads": child_model.grads
   }
 
   ops = {
@@ -258,8 +261,20 @@ def train():
             child_ops["grad_norm"],
             child_ops["train_acc"],
             child_ops["train_op"],
+            child_ops["output"],
+            child_ops["layers"],
+            child_ops["grads"]
           ]
-          loss, lr, gn, tr_acc, _ = sess.run(run_ops)
+          loss, lr, gn, tr_acc, _, output, layers, grads = sess.run(run_ops)
+          # print('=' * 100)
+          # for i, grad in enumerate(grads):
+          #     print(i, np.min(grad), np.max(grad))
+          # print(output)
+          # print(output.shape, np.max(output))
+          # for iii, layer in enumerate(layers):
+          #     print(iii, '-' * 80)
+          #     print(layer)
+
           global_step = sess.run(child_ops["global_step"])
 
           if FLAGS.child_sync_replicas:
