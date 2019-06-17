@@ -550,7 +550,7 @@ class GeneralChild(Model):
     label_onehot = tf.cast(tf.one_hot(self.y_train, 10), tf.float32)
     with tf.name_scope('loss'):
       # TODO: change to reduce_mean?
-      self.loss = 0.5 * tf.reduce_sum(tf.abs(label_onehot - output))
+      self.loss = 0.5 * tf.reduce_mean(tf.square(label_onehot - output))
 
     self.train_preds = tf.argmax(output, axis=1)
     self.train_preds = tf.to_int32(self.train_preds)
