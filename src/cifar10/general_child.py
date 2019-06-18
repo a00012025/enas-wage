@@ -85,6 +85,10 @@ class GeneralChild(Model):
     self.lr_min = lr_min
     self.lr_T_0 = lr_T_0
     self.lr_T_mul = lr_T_mul
+    self.lr_init = lr_init
+    self.lr_dec_start = lr_dec_start
+    self.lr_dec_every = lr_dec_every
+    self.lr_dec_rate = lr_dec_rate
     self.out_filters = out_filters * out_filters_scale
     self.num_layers = num_layers
 
@@ -142,7 +146,7 @@ class GeneralChild(Model):
     stride_spec = self._get_strides(stride)
     # Skip path 1
     path1 = tf.nn.avg_pool(
-        x, [1, 1, 1, 1], stride_spec, "VALID", data_format=self.data_format)
+        x, [2, 2, 2, 2], stride_spec, "VALID", data_format=self.data_format)
     with tf.variable_scope("path1_conv"):
       inp_c = self._get_C(path1)
       w = create_weight("w", [1, 1, inp_c, out_filters // 2])
@@ -162,7 +166,7 @@ class GeneralChild(Model):
       concat_axis = 1
   
     path2 = tf.nn.avg_pool(
-        path2, [1, 1, 1, 1], stride_spec, "VALID", data_format=self.data_format)
+        path2, [2, 2, 2, 2], stride_spec, "VALID", data_format=self.data_format)
     with tf.variable_scope("path2_conv"):
       inp_c = self._get_C(path2)
       w = create_weight("w", [1, 1, inp_c, out_filters // 2])
@@ -232,12 +236,7 @@ class GeneralChild(Model):
       if is_training:
         x = tf.nn.dropout(x, self.keep_prob)
       with tf.variable_scope("fc"):
-        if self.data_format == "NWHC":
-          inp_c = x.get_shape()[3].value
-        elif self.data_format == "NCHW":
-          inp_c = x.get_shape()[1].value
-        else:
-          raise ValueError("Unknown data_format {0}".format(self.data_format))
+        inp_c = x.get_shape()[1].value
         w = create_weight("w", [inp_c, 10])
         x = tf.matmul(x, w)
     return x
